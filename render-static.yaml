@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: kestrel-voting-backend
+    env: node
+    buildCommand: npm install
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PORT
+        value: 10000
+
+  - type: web
+    name: kestrel-voting-frontend
+    env: static
+    buildCommand: ./build.sh
+    staticPublishPath: ./client/build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://kestrelvotingsystem.onrender.com/api
