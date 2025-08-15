@@ -18,7 +18,7 @@ export const AuthProvider = ({ children }) => {
 
   // Set up axios defaults
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const apiUrl = isLocalhost ? 'http://localhost:5000/api' : 'https://kestrelvotingsystem-1.onrender.com/api';
+  const apiUrl = isLocalhost ? 'http://localhost:5000/api' : 'https://kestrelvotingsystem.onrender.com/api';
   console.log('API URL:', apiUrl);
   console.log('Current hostname:', window.location.hostname);
   console.log('Is localhost:', isLocalhost);
