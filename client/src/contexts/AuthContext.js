@@ -17,7 +17,8 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // Set up axios defaults
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  const apiUrl = process.env.REACT_APP_API_URL || 
+    (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : 'https://kestrelvotingsystem.onrender.com/api');
   console.log('API URL:', apiUrl);
   axios.defaults.baseURL = apiUrl;
 
