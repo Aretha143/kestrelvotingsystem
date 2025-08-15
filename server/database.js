@@ -2,7 +2,10 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
-const dbPath = path.join(__dirname, '../data/voting.db');
+// Use /tmp directory for production (Render) or local data directory for development
+const dbPath = process.env.NODE_ENV === 'production' 
+  ? '/tmp/voting.db'
+  : path.join(__dirname, '../data/voting.db');
 
 let db;
 

@@ -15,11 +15,14 @@ const voteRoutes = require('./routes/votes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust proxy for rate limiting (needed for Render)
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL || 'https://your-app-name.onrender.com'] 
+    ? [process.env.FRONTEND_URL || 'https://kestrelvotingsystem.onrender.com'] 
     : ['http://localhost:3000'],
   credentials: true
 }));
@@ -44,11 +47,30 @@ app.use('/api/votes', voteRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/build')));
+  const buildPath = path.join(__dirname, '../client/build');
   
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build/index.html'));
-  });
+  // Check if build directory exists
+  if (require('fs').existsSync(buildPath)) {
+    app.use(express.static(buildPath));
+    
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(buildPath, 'index.html'));
+    });
+  } else {
+    // If no build files, serve API only
+    app.get('/', (req, res) => {
+      res.json({ 
+        message: 'Kestrel Nest Garden Voting System API',
+        status: 'running',
+        endpoints: {
+          auth: '/api/auth',
+          staff: '/api/staff',
+          campaigns: '/api/campaigns',
+          votes: '/api/votes'
+        }
+      });
+    });
+  }
 }
 
 // Error handling middleware
