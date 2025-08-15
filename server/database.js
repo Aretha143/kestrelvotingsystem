@@ -93,7 +93,7 @@ async function initDatabase() {
         }
         
         if (!row) {
-          const hashedPassword = await bcrypt.hash('admin123', 10);
+          const hashedPassword = await bcrypt.hash('KestrelNestGarden@@#$', 10);
           database.run(
             "INSERT INTO admins (username, password_hash, email) VALUES (?, ?, ?)",
             ['admin', hashedPassword, 'admin@kestrelnest.com'],
