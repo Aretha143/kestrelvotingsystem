@@ -11,7 +11,8 @@
     "build-client": "cd client && npm run build",
     "heroku-postbuild": "npm run install-client && npm run build-client",
     "render-postbuild": "npm run install-client && npm run build-client",
-    "static-build": "./build.sh"
+    "static-build": "./build.sh",
+    "render-static": "npm install && cd client && npm install && npm run build"
   },
   "keywords": ["voting", "staff", "election"],
   "author": "Your Name",
