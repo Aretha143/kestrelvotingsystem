@@ -22,7 +22,11 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL || 'https://kestrelvotingsystem.onrender.com'] 
+    ? [
+        process.env.FRONTEND_URL || 'https://kestrelvotingsystem.onrender.com',
+        'https://kestrelvotingsystem-1.onrender.com',
+        'https://kestrelvotingsystem.onrender.com'
+      ] 
     : ['http://localhost:3000'],
   credentials: true
 }));
