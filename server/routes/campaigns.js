@@ -1,51 +1,124 @@
 const express = require('express');
-const { getDatabase } = require('../database');
+const { getDatabase, isUsingMongoDB } = require('../database');
 const { verifyToken, verifyAdmin } = require('./auth');
 
 const router = express.Router();
 
 // Get all campaigns
-router.get('/', verifyToken, (req, res) => {
-  const db = getDatabase();
-  
-  db.all(
-    'SELECT * FROM campaigns ORDER BY created_at DESC',
-    (err, campaigns) => {
-      if (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Database error'
-        });
-      }
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const db = getDatabase();
+    
+    if (isUsingMongoDB()) {
+      // MongoDB approach
+      const campaignsCollection = db.collection('campaigns');
+      const campaigns = await campaignsCollection.find({}).sort({ created_at: -1 }).toArray();
+      
+      // Transform MongoDB documents to match expected format
+      const transformedCampaigns = campaigns.map(doc => ({
+        id: doc._id.toString(),
+        title: doc.title,
+        description: doc.description,
+        start_date: doc.start_date,
+        end_date: doc.end_date,
+        is_active: doc.is_active,
+        is_published: doc.is_published,
+        created_at: doc.created_at,
+        updated_at: doc.updated_at
+      }));
 
       res.json({
         success: true,
-        data: campaigns
+        data: transformedCampaigns
       });
+    } else {
+      // SQLite approach
+      db.all(
+        'SELECT * FROM campaigns ORDER BY created_at DESC',
+        (err, campaigns) => {
+          if (err) {
+            return res.status(500).json({
+              success: false,
+              message: 'Database error'
+            });
+          }
+
+          res.json({
+            success: true,
+            data: campaigns
+          });
+        }
+      );
     }
-  );
+  } catch (error) {
+    console.error('Error fetching campaigns:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Database error'
+    });
+  }
 });
 
 // Get active campaigns
-router.get('/active', verifyToken, (req, res) => {
-  const db = getDatabase();
-  
-  db.all(
-    'SELECT * FROM campaigns WHERE is_active = 1 AND is_published = 1 AND datetime("now") BETWEEN start_date AND end_date ORDER BY created_at DESC',
-    (err, campaigns) => {
-      if (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Database error'
-        });
-      }
+router.get('/active', verifyToken, async (req, res) => {
+  try {
+    const db = getDatabase();
+    
+    if (isUsingMongoDB()) {
+      // MongoDB approach
+      const campaignsCollection = db.collection('campaigns');
+      const now = new Date();
+      
+      const campaigns = await campaignsCollection.find({
+        is_active: true,
+        is_published: true,
+        start_date: { $lte: now },
+        end_date: { $gte: now }
+      }).sort({ created_at: -1 }).toArray();
+      
+      // Transform MongoDB documents to match expected format
+      const transformedCampaigns = campaigns.map(doc => ({
+        id: doc._id.toString(),
+        title: doc.title,
+        description: doc.description,
+        start_date: doc.start_date,
+        end_date: doc.end_date,
+        is_active: doc.is_active,
+        is_published: doc.is_published,
+        created_at: doc.created_at,
+        updated_at: doc.updated_at
+      }));
 
       res.json({
         success: true,
-        data: campaigns
+        data: transformedCampaigns
       });
+    } else {
+      // SQLite approach
+      db.all(
+        'SELECT * FROM campaigns WHERE is_active = 1 AND is_published = 1 AND datetime("now") BETWEEN start_date AND end_date ORDER BY created_at DESC',
+        (err, campaigns) => {
+          if (err) {
+            return res.status(500).json({
+              success: false,
+              message: 'Database error'
+            });
+          }
+
+          res.json({
+            success: true,
+            data: campaigns
+          });
+        }
+      );
     }
-  );
+  } catch (error) {
+    console.error('Error fetching active campaigns:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Database error'
+    });
+  }
 });
 
 // Get campaign by ID
@@ -80,61 +153,100 @@ router.get('/:id', verifyToken, (req, res) => {
 });
 
 // Create new campaign (admin only)
-router.post('/', verifyToken, verifyAdmin, (req, res) => {
-  const { title, description, startDate, endDate } = req.body;
+router.post('/', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { title, description, startDate, endDate } = req.body;
 
-  if (!title || !startDate || !endDate) {
-    return res.status(400).json({
-      success: false,
-      message: 'Title, start date, and end date are required'
-    });
-  }
+    if (!title || !startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, start date, and end date are required'
+      });
+    }
 
-  // Validate dates
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const now = new Date();
+    // Validate dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const now = new Date();
 
-  if (start <= now) {
-    return res.status(400).json({
-      success: false,
-      message: 'Start date must be in the future'
-    });
-  }
+    if (start <= now) {
+      return res.status(400).json({
+        success: false,
+        message: 'Start date must be in the future'
+      });
+    }
 
-  if (end <= start) {
-    return res.status(400).json({
-      success: false,
-      message: 'End date must be after start date'
-    });
-  }
+    if (end <= start) {
+      return res.status(400).json({
+        success: false,
+        message: 'End date must be after start date'
+      });
+    }
 
-  const db = getDatabase();
-  
-  db.run(
-    'INSERT INTO campaigns (title, description, start_date, end_date) VALUES (?, ?, ?, ?)',
-    [title, description || null, startDate, endDate],
-    function(err) {
-      if (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Database error'
-        });
-      }
+    const db = getDatabase();
+    
+    if (isUsingMongoDB()) {
+      // MongoDB approach
+      const campaignsCollection = db.collection('campaigns');
+      
+      const newCampaign = {
+        title,
+        description: description || null,
+        start_date: start,
+        end_date: end,
+        is_active: true,
+        is_published: false,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+
+      const result = await campaignsCollection.insertOne(newCampaign);
 
       res.status(201).json({
         success: true,
         message: 'Campaign created successfully',
         data: {
-          id: this.lastID,
+          id: result.insertedId.toString(),
           title,
           description,
           startDate,
           endDate
         }
       });
+    } else {
+      // SQLite approach
+      db.run(
+        'INSERT INTO campaigns (title, description, start_date, end_date) VALUES (?, ?, ?, ?)',
+        [title, description || null, startDate, endDate],
+        function(err) {
+          if (err) {
+            return res.status(500).json({
+              success: false,
+              message: 'Database error'
+            });
+          }
+
+          res.status(201).json({
+            success: true,
+            message: 'Campaign created successfully',
+            data: {
+              id: this.lastID,
+              title,
+              description,
+              startDate,
+              endDate
+            }
+          });
+        }
+      );
     }
-  );
+  } catch (error) {
+    console.error('Error creating campaign:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Database error'
+    });
+  }
 });
 
 // Update campaign (admin only)
