@@ -17,6 +17,15 @@ function isMongoDBConfigured() {
          MONGODB_URI.includes('.mongodb.net'); // Is Atlas URL
 }
 
+// Log system information for debugging
+function logSystemInfo() {
+  console.log('🔍 System Info:');
+  console.log('   Node.js version:', process.version);
+  console.log('   Platform:', process.platform);
+  console.log('   Architecture:', process.arch);
+  console.log('   OpenSSL version:', process.versions.openssl);
+}
+
 // Try to convert mongodb+srv to mongodb format for better compatibility
 function getAlternativeConnectionString() {
   if (!MONGODB_URI || !MONGODB_URI.includes('mongodb+srv://')) {
@@ -32,13 +41,22 @@ function getAlternativeConnectionString() {
     const pathname = url.pathname;
     const search = url.search;
     
-    // Convert to mongodb:// format with explicit port and modern TLS
-    const alternativeUri = `mongodb://${username}:${password}@${hostname}:27017${pathname}${search}&tls=true&replicaSet=atlas-${hostname.split('.')[0]}-shard-0&authSource=admin`;
+    // Create multiple alternative formats
+    const alternatives = [
+      // Standard mongodb:// format
+      `mongodb://${username}:${password}@${hostname}:27017${pathname}${search}&tls=true&replicaSet=atlas-${hostname.split('.')[0]}-shard-0&authSource=admin`,
+      // Without replica set
+      `mongodb://${username}:${password}@${hostname}:27017${pathname}${search}&tls=true&authSource=admin`,
+      // With different TLS options
+      `mongodb://${username}:${password}@${hostname}:27017${pathname}${search}&tls=true&tlsAllowInvalidCertificates=true&authSource=admin`,
+      // Without TLS (for testing)
+      `mongodb://${username}:${password}@${hostname}:27017${pathname}${search}&authSource=admin`
+    ];
     
-    console.log('🔄 Trying alternative connection string format...');
-    return alternativeUri;
+    console.log('🔄 Trying alternative connection string formats...');
+    return alternatives;
   } catch (error) {
-    console.log('⚠️ Could not create alternative connection string');
+    console.log('⚠️ Could not create alternative connection strings');
     return null;
   }
 }
@@ -153,9 +171,21 @@ async function connectToMongoDB() {
               maxPoolSize: 1,
               minPoolSize: 1,
               tls: true,
-              tlsAllowInvalidCertificates: true,
-              tlsAllowInvalidHostnames: true,
               tlsInsecure: true,
+            }
+          },
+          {
+            name: 'No TLS (Insecure)',
+            options: {
+              useNewUrlParser: true,
+              useUnifiedTopology: true,
+              retryWrites: true,
+              w: 'majority',
+              serverSelectionTimeoutMS: 30000,
+              socketTimeoutMS: 60000,
+              maxPoolSize: 1,
+              minPoolSize: 1,
+              tls: false,
             }
           }
         ];
@@ -174,34 +204,37 @@ async function connectToMongoDB() {
           }
         }
         
-        // Try alternative connection string format
-        const alternativeUri = getAlternativeConnectionString();
-        if (alternativeUri) {
-          try {
-            console.log('🔄 Trying mongodb:// format...');
-            mongoClient = new MongoClient(alternativeUri, {
-              useNewUrlParser: true,
-              useUnifiedTopology: true,
-              retryWrites: true,
-              w: 'majority',
-              serverSelectionTimeoutMS: 30000,
-              socketTimeoutMS: 60000,
-              tls: true,
-              tlsAllowInvalidCertificates: false,
-            });
-            
-            await mongoClient.connect();
-            console.log('✅ Connected to MongoDB Atlas with mongodb:// format');
-            
-            mongoDb = mongoClient.db();
-            return mongoClient;
-          } catch (finalError) {
-            console.error('❌ All MongoDB connection attempts failed:', finalError.message);
-            throw error; // Throw the original error
+        // Try alternative connection string formats
+        const alternativeUris = getAlternativeConnectionString();
+        if (alternativeUris && Array.isArray(alternativeUris)) {
+          for (let i = 0; i < alternativeUris.length; i++) {
+            try {
+              console.log(`🔄 Trying mongodb:// format ${i + 1}/${alternativeUris.length}...`);
+              mongoClient = new MongoClient(alternativeUris[i], {
+                useNewUrlParser: true,
+                useUnifiedTopology: true,
+                retryWrites: true,
+                w: 'majority',
+                serverSelectionTimeoutMS: 30000,
+                socketTimeoutMS: 60000,
+                tls: true,
+                tlsAllowInvalidCertificates: false,
+              });
+              
+              await mongoClient.connect();
+              console.log(`✅ Connected to MongoDB Atlas with mongodb:// format ${i + 1}`);
+              
+              mongoDb = mongoClient.db();
+              return mongoClient;
+            } catch (formatError) {
+              console.error(`❌ mongodb:// format ${i + 1} failed:`, formatError.message);
+            }
           }
-        } else {
-          throw error; // Throw the original error
+          console.error('❌ All mongodb:// format attempts failed');
         }
+        
+        console.error('❌ All MongoDB connection attempts failed');
+        throw error; // Throw the original error
       }
       
       // Wait before retrying
@@ -474,6 +507,7 @@ async function createMongoIndexes(database) {
 // Main database initialization
 async function initDatabase() {
   try {
+    logSystemInfo();
     logConnectionInfo();
     
     if (isMongoDBConfigured()) {
