@@ -19,6 +19,9 @@ function isMongoDBConfigured() {
 
 // Validate and log connection string (without sensitive info)
 function logConnectionInfo() {
+  console.log('🔍 Debug: MONGODB_URI length:', MONGODB_URI ? MONGODB_URI.length : 'undefined');
+  console.log('🔍 Debug: MONGODB_URI starts with:', MONGODB_URI ? MONGODB_URI.substring(0, 20) + '...' : 'undefined');
+  
   if (!isMongoDBConfigured()) {
     console.log('⚠️  MongoDB Atlas not configured, using SQLite fallback');
     console.log('📝 To use MongoDB Atlas, set MONGODB_URI environment variable');
@@ -30,7 +33,7 @@ function logConnectionInfo() {
     console.log(`🔗 Connecting to MongoDB: ${url.protocol}//${url.hostname}${url.pathname}`);
     console.log(`📊 Database: ${url.pathname.replace('/', '') || 'default'}`);
   } catch (error) {
-    console.log('⚠️  Could not parse MONGODB_URI format');
+    console.log('⚠️  Could not parse MONGODB_URI format:', error.message);
   }
 }
 
