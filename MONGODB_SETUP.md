@@ -4,6 +4,12 @@
 
 Your application now supports **both MongoDB Atlas and SQLite**! It will automatically use MongoDB Atlas when properly configured, or fall back to SQLite for immediate functionality.
 
+### Recent Updates (Latest Deployment)
+- ✅ **Fixed SSL/TLS Connection Issues**: Removed deprecated `sslValidate` option
+- ✅ **Enhanced Connection Strategies**: Multiple TLS configuration fallbacks
+- ✅ **Modern MongoDB Driver**: Updated to use current best practices
+- ✅ **Improved Error Handling**: Better retry logic and connection diagnostics
+
 ## Quick Setup for MongoDB Atlas
 
 ### Step 1: Create MongoDB Atlas Account
@@ -83,7 +89,9 @@ mongodb+srv://myuser:mypassword@cluster0.xxxxx.mongodb.net/voting-system?retryWr
 ### Common Issues:
 
 1. **SSL/TLS Connection Errors**
-   - The application includes modern TLS configuration
+   - The application includes modern TLS configuration with multiple fallback strategies
+   - Updated to use `tlsAllowInvalidCertificates` instead of deprecated `sslValidate`
+   - Automatically tries different TLS configurations if the initial connection fails
    - Try different regions if issues persist
    - Check network access settings
 
