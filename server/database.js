@@ -101,7 +101,7 @@ async function initDatabase() {
               if (err) {
                 console.error('Error creating default admin:', err);
               } else {
-                console.log('✅ Default admin created (username: admin, password: admin123)');
+                console.log('✅ Default admin created (username: admin, password: KestrelNestGarden@@#$)');
               }
             }
           );
