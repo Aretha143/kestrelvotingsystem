@@ -17,6 +17,32 @@ function isMongoDBConfigured() {
          MONGODB_URI.includes('.mongodb.net'); // Is Atlas URL
 }
 
+// Try to convert mongodb+srv to mongodb format for better compatibility
+function getAlternativeConnectionString() {
+  if (!MONGODB_URI || !MONGODB_URI.includes('mongodb+srv://')) {
+    return null;
+  }
+  
+  try {
+    // Extract components from mongodb+srv://
+    const url = new URL(MONGODB_URI);
+    const username = url.username;
+    const password = url.password;
+    const hostname = url.hostname;
+    const pathname = url.pathname;
+    const search = url.search;
+    
+    // Convert to mongodb:// format with explicit port
+    const alternativeUri = `mongodb://${username}:${password}@${hostname}:27017${pathname}${search}&ssl=true&replicaSet=atlas-${hostname.split('.')[0]}-shard-0&authSource=admin`;
+    
+    console.log('🔄 Trying alternative connection string format...');
+    return alternativeUri;
+  } catch (error) {
+    console.log('⚠️ Could not create alternative connection string');
+    return null;
+  }
+}
+
 // Validate and log connection string (without sensitive info)
 function logConnectionInfo() {
   console.log('🔍 Debug: MONGODB_URI length:', MONGODB_URI ? MONGODB_URI.length : 'undefined');
@@ -51,6 +77,10 @@ function getMongoClientOptions() {
     tls: true,
     tlsAllowInvalidCertificates: true,
     tlsAllowInvalidHostnames: true,
+    // Additional SSL/TLS options for Render.com compatibility
+    ssl: true,
+    sslValidate: false,
+    directConnection: false,
   };
 }
 
@@ -77,8 +107,62 @@ async function connectToMongoDB() {
       console.error(`❌ Failed to connect to MongoDB (attempt ${retryCount}/${maxRetries}):`, error.message);
       
       if (retryCount >= maxRetries) {
-        console.error('❌ Max retries reached. Falling back to SQLite...');
-        throw error;
+        console.error('❌ Max retries reached. Trying alternative connection approach...');
+        
+        // Try alternative connection approach with minimal options
+        try {
+          const alternativeOptions = {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            retryWrites: true,
+            w: 'majority',
+            serverSelectionTimeoutMS: 30000,
+            socketTimeoutMS: 60000,
+            maxPoolSize: 1,
+            minPoolSize: 1,
+            // Minimal SSL options
+            ssl: true,
+            sslValidate: false,
+          };
+          
+          mongoClient = new MongoClient(MONGODB_URI, alternativeOptions);
+          await mongoClient.connect();
+          console.log('✅ Connected to MongoDB Atlas with alternative approach');
+          
+          mongoDb = mongoClient.db();
+          return mongoClient;
+        } catch (altError) {
+          console.error('❌ Alternative connection also failed:', altError.message);
+          
+          // Try alternative connection string format
+          const alternativeUri = getAlternativeConnectionString();
+          if (alternativeUri) {
+            try {
+              console.log('🔄 Trying mongodb:// format...');
+              mongoClient = new MongoClient(alternativeUri, {
+                useNewUrlParser: true,
+                useUnifiedTopology: true,
+                retryWrites: true,
+                w: 'majority',
+                serverSelectionTimeoutMS: 30000,
+                socketTimeoutMS: 60000,
+                ssl: true,
+                sslValidate: false,
+              });
+              
+              await mongoClient.connect();
+              console.log('✅ Connected to MongoDB Atlas with mongodb:// format');
+              
+              mongoDb = mongoClient.db();
+              return mongoClient;
+            } catch (finalError) {
+              console.error('❌ All MongoDB connection attempts failed:', finalError.message);
+              throw error; // Throw the original error
+            }
+          } else {
+            throw error; // Throw the original error
+          }
+        }
       }
       
       // Wait before retrying
