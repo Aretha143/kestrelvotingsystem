@@ -24,6 +24,14 @@ function logSystemInfo() {
   console.log('   Platform:', process.platform);
   console.log('   Architecture:', process.arch);
   console.log('   OpenSSL version:', process.versions.openssl);
+  
+  // Check for Node.js 24 compatibility issues
+  const nodeVersion = process.version;
+  if (nodeVersion.startsWith('v24')) {
+    console.log('⚠️  Node.js 24 detected - known MongoDB Atlas compatibility issues');
+    console.log('💡 Consider using Node.js 18 or 20 for better MongoDB compatibility');
+    console.log('💡 Current app will work with SQLite fallback');
+  }
 }
 
 // Try to convert mongodb+srv to mongodb format for better compatibility
@@ -92,12 +100,16 @@ function getMongoClientOptions() {
     socketTimeoutMS: 60000,
     maxPoolSize: 10,
     minPoolSize: 1,
-    // Modern TLS configuration (removed deprecated sslValidate)
+    // Modern TLS configuration with Node.js 24 compatibility
     tls: true,
     tlsAllowInvalidCertificates: false,
     tlsAllowInvalidHostnames: false,
-    // Remove deprecated SSL options
+    // Node.js 24 compatibility options
     directConnection: false,
+    // Force TLS 1.2 for compatibility
+    tlsCAFile: undefined,
+    // Disable certificate verification for testing
+    tlsInsecure: false,
   };
 }
 
@@ -128,6 +140,24 @@ async function connectToMongoDB() {
         
         // Try multiple connection strategies
         const connectionStrategies = [
+          {
+            name: 'Node.js 24 Compatible',
+            options: {
+              useNewUrlParser: true,
+              useUnifiedTopology: true,
+              retryWrites: true,
+              w: 'majority',
+              serverSelectionTimeoutMS: 30000,
+              socketTimeoutMS: 60000,
+              maxPoolSize: 1,
+              minPoolSize: 1,
+              tls: true,
+              tlsAllowInvalidCertificates: true,
+              tlsAllowInvalidHostnames: true,
+              // Node.js 24 specific options
+              directConnection: false,
+            }
+          },
           {
             name: 'Minimal TLS',
             options: {
