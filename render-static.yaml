@@ -11,6 +11,8 @@ services:
         generateValue: true
       - key: PORT
         value: 10000
+      - key: MONGODB_URI
+        sync: false
 
   - type: web
     name: kestrel-voting-frontend
