@@ -61,45 +61,85 @@ router.get('/', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // Get active staff members for voting (staff only)
-router.get('/voting', verifyToken, (req, res) => {
-  const db = getDatabase();
-  
-  // Exclude the current user from the voting candidates
-  db.all(
-    'SELECT id, staff_id, name, position, department FROM staff WHERE is_active = 1 AND staff_id != ? ORDER BY name',
-    [req.user.staffId],
-    (err, staff) => {
-      if (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Database error'
-        });
-      }
+router.get('/voting', verifyToken, async (req, res) => {
+  try {
+    const db = getDatabase();
+    
+    if (isUsingMongoDB()) {
+      // MongoDB approach
+      const staffCollection = db.collection('staff');
+      
+      // Exclude the current user from the voting candidates
+      const staff = await staffCollection.find({ 
+        is_active: true, 
+        staff_id: { $ne: req.user.staffId } 
+      }).sort({ name: 1 }).toArray();
+      
+      // Transform MongoDB documents to match expected format
+      const transformedStaff = staff.map(doc => ({
+        id: doc._id.toString(),
+        staff_id: doc.staff_id,
+        name: doc.name,
+        position: doc.position,
+        department: doc.department
+      }));
 
       res.json({
         success: true,
-        data: staff
+        data: transformedStaff
       });
+    } else {
+      // SQLite approach
+      db.all(
+        'SELECT id, staff_id, name, position, department FROM staff WHERE is_active = 1 AND staff_id != ? ORDER BY name',
+        [req.user.staffId],
+        (err, staff) => {
+          if (err) {
+            return res.status(500).json({
+              success: false,
+              message: 'Database error'
+            });
+          }
+
+          res.json({
+            success: true,
+            data: staff
+          });
+        }
+      );
     }
-  );
+  } catch (error) {
+    console.error('Error fetching voting staff:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Database error'
+    });
+  }
 });
 
 // Get staff by ID
-router.get('/:id', verifyToken, (req, res) => {
-  const db = getDatabase();
-  const { id } = req.params;
-  
-  db.get(
-    'SELECT id, staff_id, name, position, department, email, phone, is_active, created_at FROM staff WHERE id = ?',
-    [id],
-    (err, staff) => {
-      if (err) {
-        return res.status(500).json({
+router.get('/:id', verifyToken, async (req, res) => {
+  try {
+    const db = getDatabase();
+    const { id } = req.params;
+    
+    if (isUsingMongoDB()) {
+      // MongoDB approach
+      const staffCollection = db.collection('staff');
+      const { ObjectId } = require('mongodb');
+      
+      let objectId;
+      try {
+        objectId = new ObjectId(id);
+      } catch (error) {
+        return res.status(400).json({
           success: false,
-          message: 'Database error'
+          message: 'Invalid staff ID format'
         });
       }
 
+      const staff = await staffCollection.findOne({ _id: objectId });
+      
       if (!staff) {
         return res.status(404).json({
           success: false,
@@ -107,12 +147,57 @@ router.get('/:id', verifyToken, (req, res) => {
         });
       }
 
+      // Transform MongoDB document to match expected format
+      const transformedStaff = {
+        id: staff._id.toString(),
+        staff_id: staff.staff_id,
+        name: staff.name,
+        position: staff.position,
+        department: staff.department,
+        email: staff.email,
+        phone: staff.phone,
+        is_active: staff.is_active,
+        created_at: staff.created_at
+      };
+
       res.json({
         success: true,
-        data: staff
+        data: transformedStaff
       });
+    } else {
+      // SQLite approach
+      db.get(
+        'SELECT id, staff_id, name, position, department, email, phone, is_active, created_at FROM staff WHERE id = ?',
+        [id],
+        (err, staff) => {
+          if (err) {
+            return res.status(500).json({
+              success: false,
+              message: 'Database error'
+            });
+          }
+
+          if (!staff) {
+            return res.status(404).json({
+              success: false,
+              message: 'Staff member not found'
+            });
+          }
+
+          res.json({
+            success: true,
+            data: staff
+          });
+        }
+      );
     }
-  );
+  } catch (error) {
+    console.error('Error fetching staff by ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Database error'
+    });
+  }
 });
 
 // Create new staff member (admin only)
@@ -520,30 +605,63 @@ router.delete('/:id', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // Get staff statistics (admin only)
-router.get('/stats/overview', verifyToken, verifyAdmin, (req, res) => {
-  const db = getDatabase();
-  
-  db.get(
-    `SELECT 
-      COUNT(*) as totalStaff,
-      COUNT(CASE WHEN is_active = 1 THEN 1 END) as activeStaff,
-      COUNT(CASE WHEN is_active = 0 THEN 1 END) as inactiveStaff,
-      COUNT(DISTINCT department) as departments
-    FROM staff`,
-    (err, stats) => {
-      if (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Database error'
-        });
-      }
+router.get('/stats/overview', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const db = getDatabase();
+    
+    if (isUsingMongoDB()) {
+      // MongoDB approach
+      const staffCollection = db.collection('staff');
+      
+      const totalStaff = await staffCollection.countDocuments({});
+      const activeStaff = await staffCollection.countDocuments({ is_active: true });
+      const inactiveStaff = await staffCollection.countDocuments({ is_active: false });
+      
+      // Get unique departments
+      const departments = await staffCollection.distinct('department');
+      
+      const stats = {
+        totalStaff,
+        activeStaff,
+        inactiveStaff,
+        departments: departments.length
+      };
 
       res.json({
         success: true,
         data: stats
       });
+    } else {
+      // SQLite approach
+      db.get(
+        `SELECT 
+          COUNT(*) as totalStaff,
+          COUNT(CASE WHEN is_active = 1 THEN 1 END) as activeStaff,
+          COUNT(CASE WHEN is_active = 0 THEN 1 END) as inactiveStaff,
+          COUNT(DISTINCT department) as departments
+        FROM staff`,
+        (err, stats) => {
+          if (err) {
+            return res.status(500).json({
+              success: false,
+              message: 'Database error'
+            });
+          }
+
+          res.json({
+            success: true,
+            data: stats
+          });
+        }
+      );
     }
-  );
+  } catch (error) {
+    console.error('Error fetching staff statistics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Database error'
+    });
+  }
 });
 
 // Get staff by department
